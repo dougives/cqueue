@@ -1,4 +1,4 @@
-#include <stdint.h>
+﻿#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -47,8 +47,12 @@ CQMessage cq_deq()
 	static uint32_t lead = 0; // yeehaw
 	CQMessage msg;
 	CQMessage* grabbed;
-	while ((grabbed = &queue[++lead & QMASK])->state != STATE_READY 
-		|| !atomic_lock(&grabbed->lock)) ;
+	while ((grabbed = &queue[++lead & QMASK])->state != STATE_READY
+		|| !atomic_lock(&grabbed->lock))
+	{
+		printf("卡");
+	}
+	;
 	while (!atomic_set(&grabbed->state, STATE_DEQ)) ;
 	memcpy(&msg, grabbed, sizeof(CQMessage));
 	// wish i could return here ... maybe gc?
@@ -80,7 +84,7 @@ void cq_test_enqer()
 	while (true)
 	{
 		memset(&msg, 0, sizeof(CQMessage));
-		msg.payload[0] = i++ | 1;
+		msg.payload[0] = (i++ & 0x0f) + 0x61;
 		cq_enq(&msg);
 	}
 }
@@ -89,7 +93,7 @@ void cq_test_deqer()
 {
 	while (true)
 	{
-		printf("%d\n", cq_deq().payload[0]);
+		printf("%c", cq_deq().payload[0]);
 	}
 }
 
