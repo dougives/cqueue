@@ -21,6 +21,8 @@
 #define MSGSIZE		0x00000100u
 #define HEADERSIZE	sizeof(struct CQMessageHeader)
 
+static int blocks = 0;
+static int tp = 0;
 
 typedef union
 {
@@ -44,19 +46,20 @@ static CQMessage queue[QSIZE];
 
 CQMessage cq_deq()
 {
-	static uint32_t lead = 0; // yeehaw
+	uint32_t lead = 0; // yeehaw
 	CQMessage msg;
 	CQMessage* grabbed;
-	while ((grabbed = &queue[++lead & QMASK])->state != STATE_READY
-		|| !atomic_lock(&grabbed->lock))
+	while (!
+		((grabbed = &queue[++lead & QMASK])->state == STATE_READY
+		&& atomic_lock(&grabbed->lock)))
 	{
-		printf("卡");
-	}
-	;
+		//blocks++;
+		//Sleep(1);
+	};
 	while (!atomic_set(&grabbed->state, STATE_DEQ)) ;
 	memcpy(&msg, grabbed, sizeof(CQMessage));
 	// wish i could return here ... maybe gc?
-	//memcpy(queue[lead].payload, 0, sizeof(union CQMessagePayload));
+	memset(grabbed->payload, 0, sizeof(union CQMessagePayload));
 	grabbed->rsvd = MSGTYPE_NONE;
 	atomic_unlock(&grabbed->lock);
 	while (!atomic_set(&grabbed->state, STATE_FREE));
@@ -65,10 +68,15 @@ CQMessage cq_deq()
 
 void cq_enq(const CQMessage* msg)
 {
-	static uint32_t lead = 0;
+	uint32_t lead = 0;
 	CQMessage* grabbed;
-	while ((grabbed = &queue[++lead & QMASK])->state != STATE_FREE //0
-		|| !atomic_lock(&grabbed->lock)) ;
+	while (!
+		((grabbed = &queue[++lead & QMASK])->state == STATE_FREE
+		&& atomic_lock(&grabbed->lock)))
+	{
+		//blocks++;
+		//Sleep(1);
+	}
 	while (!atomic_set(&grabbed->state, STATE_ENQ)) ;
 	//queue[lead].state = STATE_ENQ;
 	memcpy(grabbed->payload, msg->payload, sizeof(union CQMessagePayload));
@@ -93,18 +101,33 @@ void cq_test_deqer()
 {
 	while (true)
 	{
-		printf("%c", cq_deq().payload[0]);
+		cq_deq();
+		tp++;
+	}
+}
+
+void tp_per_sec()
+{
+	
+	while (true)
+	{
+		blocks = 0;
+		tp = 0;
+		Sleep(1000);
+		printf("%d\n", tp);
 	}
 }
 
 int main(void)
 {
 	LPDWORD threadid = NULL;
+	CreateThread(NULL, 0, tp_per_sec, NULL, 0, threadid);
 	CreateThread(NULL, 0, cq_test_enqer, NULL, 0, threadid);
 	CreateThread(NULL, 0, cq_test_deqer, NULL, 0, threadid);
 	while (true)
 	{
 		Sleep(100);
 	}
+	
 	return 0;
 }
