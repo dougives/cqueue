@@ -51,28 +51,33 @@ CQMessage cq_deq()
 	while (!atomic_set(&queue[lead].state, STATE_DEQ)) ;
 	memcpy(&msg, &queue[lead], sizeof(CQMessage));
 	// wish i could return here ... maybe gc?
-	memcpy(queue[lead].data + HEADERSIZE, 0, sizeof(CQMessage));
+	//memcpy(queue[lead].payload, 0, sizeof(union CQMessagePayload));
 	queue[lead].type = MSGTYPE_NONE;
 	atomic_unlock(&queue[lead].lock);
 	while (!atomic_set(&queue[lead].state, STATE_FREE));
 	return msg;
 }
 
-void cq_enq(CQMessage msg)
+void cq_enq(const CQMessage* msg)
 {
 	static uint32_t lead = 0;
 
 	while (queue[++lead & QMASK].state != STATE_FREE //0
-		|| !atomic_lock(&queue[lead].lock))
-	while (!atomic_set(&queue[lead].state, STATE_ENQ))
+		|| !atomic_lock(&queue[lead].lock)) ;
+	while (!atomic_set(&queue[lead].state, STATE_ENQ)) ;
 	//queue[lead].state = STATE_ENQ;
-	memcpy(&queue[lead], &msg, sizeof(CQMessage));
+	memcpy(&queue[lead].payload, msg->payload, sizeof(union CQMessagePayload));
 	atomic_unlock(&queue[lead].lock);
-	while (!atomic_set(&queue[lead].state, STATE_READY));
+	while (!atomic_set(&queue[lead].state, STATE_READY)) ;
 	//queue[lead].state = STATE_READY;
 }
 
 int main(void)
 {
+	CQMessage* msg = calloc(1, sizeof(CQMessage));
+	//memcpy(msg, 0, sizeof(CQMessage));
+	msg->payload[0] = 0xaa;
+	cq_enq(msg);
+	*msg = cq_deq();
 	return 0;
 }
