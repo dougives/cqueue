@@ -123,6 +123,8 @@ int main(void)
 	LPDWORD threadid = NULL;
 	CreateThread(NULL, 0, tp_per_sec, NULL, 0, threadid);
 	CreateThread(NULL, 0, cq_test_enqer, NULL, 0, threadid);
+	CreateThread(NULL, 0, cq_test_deqer, NULL, 0, threadid);	
+	CreateThread(NULL, 0, cq_test_enqer, NULL, 0, threadid);
 	CreateThread(NULL, 0, cq_test_deqer, NULL, 0, threadid);
 	while (true)
 	{
