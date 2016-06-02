@@ -47,13 +47,13 @@ CQMessage cq_deq()
 	static uint32_t lead = 0;
 	CQMessage msg;
 	while (queue[++lead & QMASK].state != STATE_READY 
-		|| !atomic_lock(queue[lead].lock)) ;
+		|| !atomic_lock(&queue[lead].lock)) ;
 	while (!atomic_set(&queue[lead].state, STATE_DEQ)) ;
 	memcpy(&msg, &queue[lead], sizeof(CQMessage));
 	// wish i could return here ... maybe gc?
 	memcpy(queue[lead].data + HEADERSIZE, 0, sizeof(CQMessage));
 	queue[lead].type = MSGTYPE_NONE;
-	atomic_unlock(queue[lead].lock);
+	atomic_unlock(&queue[lead].lock);
 	while (!atomic_set(&queue[lead].state, STATE_FREE));
 	return msg;
 }
@@ -63,11 +63,11 @@ void cq_enq(CQMessage msg)
 	static uint32_t lead = 0;
 
 	while (queue[++lead & QMASK].state != STATE_FREE //0
-		|| !atomic_lock(queue[lead].lock))
+		|| !atomic_lock(&queue[lead].lock))
 	while (!atomic_set(&queue[lead].state, STATE_ENQ))
 	//queue[lead].state = STATE_ENQ;
 	memcpy(&queue[lead], &msg, sizeof(CQMessage));
-	atomic_unlock(queue[lead].lock);
+	atomic_unlock(&queue[lead].lock);
 	while (!atomic_set(&queue[lead].state, STATE_READY));
 	//queue[lead].state = STATE_READY;
 }
