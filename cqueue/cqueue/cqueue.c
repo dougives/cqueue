@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <immintrin.h>
+#include <stdio.h>
+#include <windows.h>
 #include "atomic.h"
 
 #define MSGTYPE_ALL		~0u
@@ -19,8 +21,6 @@
 #define MSGSIZE		0x00000100u
 #define HEADERSIZE	sizeof(struct CQMessageHeader)
 
-#define cq_isempty() (head == tail)
-#define cq_isfull() (head == (tail - 1))
 
 typedef union
 {
@@ -30,7 +30,7 @@ typedef union
 		{
 			volatile uint64_t lock;
 			volatile uint32_t state;
-			uint32_t type;
+			uint32_t rsvd;
 		};
 		union CQMessagePayload
 		{
@@ -44,40 +44,63 @@ static CQMessage queue[QSIZE];
 
 CQMessage cq_deq()
 {
-	static uint32_t lead = 0;
+	static uint32_t lead = 0; // yeehaw
 	CQMessage msg;
-	while (queue[++lead & QMASK].state != STATE_READY 
-		|| !atomic_lock(&queue[lead].lock)) ;
-	while (!atomic_set(&queue[lead].state, STATE_DEQ)) ;
-	memcpy(&msg, &queue[lead], sizeof(CQMessage));
+	CQMessage* grabbed;
+	while ((grabbed = &queue[++lead & QMASK])->state != STATE_READY 
+		|| !atomic_lock(&grabbed->lock)) ;
+	while (!atomic_set(&grabbed->state, STATE_DEQ)) ;
+	memcpy(&msg, grabbed, sizeof(CQMessage));
 	// wish i could return here ... maybe gc?
 	//memcpy(queue[lead].payload, 0, sizeof(union CQMessagePayload));
-	queue[lead].type = MSGTYPE_NONE;
-	atomic_unlock(&queue[lead].lock);
-	while (!atomic_set(&queue[lead].state, STATE_FREE));
+	grabbed->rsvd = MSGTYPE_NONE;
+	atomic_unlock(&grabbed->lock);
+	while (!atomic_set(&grabbed->state, STATE_FREE));
 	return msg;
 }
 
 void cq_enq(const CQMessage* msg)
 {
 	static uint32_t lead = 0;
-
-	while (queue[++lead & QMASK].state != STATE_FREE //0
-		|| !atomic_lock(&queue[lead].lock)) ;
-	while (!atomic_set(&queue[lead].state, STATE_ENQ)) ;
+	CQMessage* grabbed;
+	while ((grabbed = &queue[++lead & QMASK])->state != STATE_FREE //0
+		|| !atomic_lock(&grabbed->lock)) ;
+	while (!atomic_set(&grabbed->state, STATE_ENQ)) ;
 	//queue[lead].state = STATE_ENQ;
-	memcpy(&queue[lead].payload, msg->payload, sizeof(union CQMessagePayload));
-	atomic_unlock(&queue[lead].lock);
-	while (!atomic_set(&queue[lead].state, STATE_READY)) ;
+	memcpy(grabbed->payload, msg->payload, sizeof(union CQMessagePayload));
+	atomic_unlock(&grabbed->lock);
+	while (!atomic_set(&grabbed->state, STATE_READY)) ;
 	//queue[lead].state = STATE_READY;
+}
+
+void cq_test_enqer()
+{
+	static CQMessage msg;
+	static char i;
+	while (true)
+	{
+		memset(&msg, 0, sizeof(CQMessage));
+		msg.payload[0] = i++ | 1;
+		cq_enq(&msg);
+	}
+}
+
+void cq_test_deqer()
+{
+	while (true)
+	{
+		printf("%d\n", cq_deq().payload[0]);
+	}
 }
 
 int main(void)
 {
-	CQMessage* msg = calloc(1, sizeof(CQMessage));
-	//memcpy(msg, 0, sizeof(CQMessage));
-	msg->payload[0] = 0xaa;
-	cq_enq(msg);
-	*msg = cq_deq();
+	LPDWORD threadid = NULL;
+	CreateThread(NULL, 0, cq_test_enqer, NULL, 0, threadid);
+	CreateThread(NULL, 0, cq_test_deqer, NULL, 0, threadid);
+	while (true)
+	{
+		Sleep(100);
+	}
 	return 0;
 }
