@@ -6,7 +6,7 @@
 #define MSGTYPE_ALL		~0uL
 #define MSGTYPE_NONE	 0uL
 
-typedef uint32_t CQEntryState;
+typedef volatile uint32_t CQEntryState;
 #define QES_FREE	0x00000000u
 #define QES_ENQ		0x00000001u
 #define QES_READY	0x00000002u
@@ -15,27 +15,6 @@ typedef uint32_t CQEntryState;
 
 #define BLOCKSIZE 0x10000u
 #define TABLESIZE (BLOCKSIZE / sizeof(CQEntry))
-
-typedef struct
-{
-	CQMemNode* prev;
-	CQMemNode* next;
-	CQEntry table[TABLESIZE];
-	size_t freeindex;
-	void* block;
-} CQMemNode;
-
-typedef struct
-{
-	CQMemNode* head;
-	CQMemNode* tail;
-} CQMemList;
-
-typedef struct
-{
-	uint64_t msgtype;
-	void* func;
-} CQConsumer;
 
 typedef struct
 {
@@ -52,8 +31,25 @@ typedef struct
 	CQMessage msg;
 } CQEntry;
 
+typedef struct
+{
+	struct CQMemNode* prev;
+	struct CQMemNode* next;
+	size_t count;
+	CQEntry* block;
+} CQMemNode;
 
+typedef struct
+{
+	CQMemNode* head;
+	CQMemNode* tail;
+} CQMemList;
 
+typedef struct
+{
+	uint64_t msgtype;
+	void* func;
+} CQConsumer;
 
 
 
@@ -65,7 +61,7 @@ CQMemNode* cq_create_memnode()
 	node->block = malloc(sizeof(BLOCKSIZE));
 	node->next = NULL;
 	node->prev = NULL;
-	node->freeindex = 0;
+	node->count = 0;
 	return node;
 }
 
@@ -74,15 +70,19 @@ CQMemNode* cq_add_memnode()
 	CQMemNode* node = memlist->tail;
 	node->next = cq_create_memnode();
 	node = node->next;
+	node->prev = memlist->tail;
 	memlist->tail = node;
 }
 
 void cq_enq(uint64_t msgtype, CQMessage msg)
 {
 	CQMemNode* node = memlist->tail;
-	if (node->freeindex >= TABLESIZE)
+	if (node->count >= TABLESIZE)
 		node = cq_add_memnode();
-
+	CQEntry entry;
+	entry.state = QES_FREE;
+	entry.msg = msg;
+	node->block[node->count++] = entry;
 }
 
 void cq_init()
@@ -90,4 +90,10 @@ void cq_init()
 	memlist = malloc(sizeof(CQMemList));
 	memlist->head = cq_create_memnode();
 	memlist->tail = memlist->head;
+}
+
+int main(void)
+{
+	cq_init();
+	return 0;
 }
