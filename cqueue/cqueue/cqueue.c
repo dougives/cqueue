@@ -2,131 +2,48 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <windows.h>
 #include "atomic.h"
 
-#define MESSAGE_SIZE 0x100
-#define NODE_ENTRY_SIZE 0x100
-//#define PAYLOAD_SIZE // sub size of header ...
+#define STATE_FREE	0x00000000u
+#define STATE_ENQ	0x00000001u
+#define STATE_READY	0x00000002u
 
-typedef union
+#define DATA_SIZE 0x100
+#define QBUFFER_SIZE 0x100
+#define QBUFFER_MASK (QBUFFER_SIZE - 1)
+
+typedef struct
 {
-	uint64_t* lock;
-	uint8_t payload[MESSAGE_SIZE];
+	uint32_t state;
+	uint8_t data[DATA_SIZE];
 } Message;
 
-typedef struct
+volatile static Message* qbuffer[QBUFFER_SIZE];
+
+
+void cq_enq(Message* msg)
 {
-	struct Node* prev;
-	struct Node* next;
-	volatile size_t lasttaken;
-	Message* entries[NODE_ENTRY_SIZE];
-} Node;
-
-typedef struct
-{
-	uint64_t* lock;
-	Node* first;
-	Node* last;
-} List;
-
-static List list;
-
-static void everything_broke()
-{
-	printf("everything broke.\n\n");
-	exit(EXIT_FAILURE);
-}
-
-static Message* get_empty_message()
-{
-	return (Message*)calloc(1, sizeof(Message));
-}
-
-static void add_new_node()
-{
-	Node* node = (Node*)calloc(1, sizeof(Node));
-	if (node == NULL)
-		everything_broke();
-
-	if (list.first == NULL && list.last == NULL)
+	volatile static size_t index = 0;  // yeehaw
+	msg->state = STATE_ENQ;
+	size_t i = index & QBUFFER_MASK;
+	for (i; i = ++index & QBUFFER_MASK; i++)
 	{
-		while (true)
-		{
-
-		}
-		list.first = node;
-		list.last = node;
-		return;
+		if (qbuffer[i]->state == STATE_FREE
+			&& atomic_set32(&qbuffer[i]->state, STATE_ENQ)) // could do bitwise atomics
+			break;
 	}
 
-	if (list.first == NULL
-		|| list.last == NULL
-		|| list.last->next != NULL)
-		everything_broke();
+	qbuffer[i] = msg;
 
-	node->prev = list.last;
-	node->entry = msg;
-	list.last->next = node;
-	list.last = node;
-	return;
-}
-
-static Message* lock_msg()
-{
-	if (list.last->lasttaken >= NODE_ENTRY_SIZE)
-		add_new_node();
-}
-
-bool cq_trydeq(Message* msg) // critical
-{
-	if (msg == NULL
-		|| list.first == NULL)
-		return false;
-
-}
-
-void cq_enq(const Message* msg)  // critical
-{
-	if (msg == NULL)
-		return;
-
-	Node* node = (Node*)calloc(1, sizeof(Node));
-	if (node == NULL)
-		everything_broke();
-
-	if (list.first == NULL && list.last == NULL)
-	{
-		while (true)
-		{
-
-		}
-		list.first = node;
-		list.last = node;
-		return;
-	}
-
-	if (list.first == NULL 
-		|| list.last == NULL
-		|| list.last->next != NULL)
-		everything_broke();
-
-	node->prev = list.last;
-	node->entry = msg;
-	list.last->next = node;
-	list.last = node;
-	return;
-}
-
-void cq_init()
-{
-
+	while(!atomic_set32(&qbuffer[i]->state, STATE_READY))
+	{ }
 	return;
 }
 
 
 int main(void)
 {
-
-
+	
 	return 0;
 }
