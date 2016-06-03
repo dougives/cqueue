@@ -5,7 +5,17 @@ VisualStudioVersion = 14.0.25123.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cqueue", "cqueue\cqueue.vcxproj", "{12F2D58F-503A-4EF8-8B6B-58539C9820E5}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{E26B7B6E-5738-4238-962E-6F38910F7D82}"
+	ProjectSection(SolutionItems) = preProject
+		cqueue.psess = cqueue.psess
+		cqueue1.psess = cqueue1.psess
+		qbuffersize.psess = qbuffersize.psess
+	EndProjectSection
+EndProject
 Global
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
+	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
 		Debug|x86 = Debug|x86
