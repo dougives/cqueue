@@ -11,7 +11,7 @@
 
 typedef struct
 {
-	uint32_t lock;
+	uint64_t lock;
 	uint8_t data[DATA_SIZE];
 } Message;
 
@@ -32,8 +32,10 @@ Message* cq_deq()
 	}
 	msg = qbuffer[i];
 	
-	while (!atomic_set64(&qbuffer[i], NULL))
+	while (!atomic_set64((uint64_t*)&qbuffer[i], (uint64_t)NULL))
 	{ }
+
+	return msg;
 }
 
 void cq_enq(Message* msg)
@@ -44,7 +46,7 @@ void cq_enq(Message* msg)
 	for (size_t i = index & QBUFFER_MASK; i = ++index & QBUFFER_MASK; i++)
 	{
 		if (qbuffer[i] == NULL
-			&& atomic_set64(&qbuffer[i], msg))
+			&& atomic_set64((uint64_t*)&qbuffer[i], (uint64_t)msg))
 			break;
 	}
 	return;
