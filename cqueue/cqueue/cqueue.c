@@ -11,28 +11,37 @@
 
 typedef struct
 {
+	uint32_t lock;
 	uint8_t data[DATA_SIZE];
 } Message;
 
 
 volatile static Message* qbuffer[QBUFFER_SIZE];
 
-bool cq_deq(Message* msg)
+Message* cq_deq()
 {
 	volatile static size_t index = 0;
+	Message* msg;
 	size_t i = index & QBUFFER_MASK;
 	for (i; i = ++index & QBUFFER_MASK; i++)
 	{
-
+		if (qbuffer[i] != NULL 
+			&& qbuffer[i]->lock == ATOMIC_UNLOCKED
+			&& atomic_lock(&qbuffer[i]->lock))
+			break;
 	}
-
+	msg = qbuffer[i];
+	
+	while (!atomic_set64(&qbuffer[i], NULL))
+	{ }
 }
 
 void cq_enq(Message* msg)
 {
 	volatile static size_t index = 0;  // yeehaw
-	size_t i = index & QBUFFER_MASK;
-	for (i; i = ++index & QBUFFER_MASK; i++)
+
+	msg->lock = ATOMIC_UNLOCKED;
+	for (size_t i = index & QBUFFER_MASK; i = ++index & QBUFFER_MASK; i++)
 	{
 		if (qbuffer[i] == NULL
 			&& atomic_set64(&qbuffer[i], msg))
@@ -44,6 +53,10 @@ void cq_enq(Message* msg)
 
 int main(void)
 {
-	
+	Message msg;
+	memset(&msg, 0, sizeof(Message));
+	Message* msgptr = &msg;
+	cq_enq(msgptr);
+	msgptr = cq_deq();
 	return 0;
 }
